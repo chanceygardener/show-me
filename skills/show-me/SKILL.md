@@ -15,7 +15,8 @@ Run `show-me` from the repository you are discussing. If it is not on `PATH`,
 use the installed copy:
 
 - macOS and Linux: `${XDG_STATE_HOME:-$HOME/.local/state}/show-me/bin/show-me`
-- Windows: `%LOCALAPPDATA%\show-me\bin\show-me.exe`
+- Windows, PowerShell: `$env:LOCALAPPDATA\show-me\bin\show-me.exe`
+- Windows, Git Bash: `"$LOCALAPPDATA/show-me/bin/show-me.exe"`
 
 ## When to use it
 

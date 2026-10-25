@@ -505,9 +505,9 @@ After phase 1 ships, in the kickstart.nvim repository:
 
 ## Phases
 
-1. **Core and Neovim.** Repository skeleton, Go CLI, protocol document and schema,
-   registry, Neovim plugin port with the sidebar and session changes, skill, installers,
-   CI on three OSes, first release. Then the kickstart.nvim migration.
+1. **Core and Neovim.** Repository skeleton, Go CLI, protocol document (schema in
+   phase 2), registry, Neovim plugin port with the sidebar and session changes, skill,
+   installers, CI on three OSes, first release. Then the kickstart.nvim migration.
 2. **VS Code, `currentWindow`.** Extension, generated TypeScript types, conformance
    suite run against it, Marketplace and Open VSX publishing.
 3. **Floating-window spike**, then `newWindow` and `ask` if it succeeds.

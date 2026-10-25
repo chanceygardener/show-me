@@ -148,7 +148,8 @@ An editor that doesn't speak the request's `protocol` replies
 - Keeps the current deck: the last `done` or picked deck, else the newest done
   deck on disk.
 - On `done`, notifies without moving focus:
-  `show-me: <title> · <n> views · <open_hint>`.
+  `show-me: <title> · <n> view(s) · <open_hint>`, with `view` singular for one
+  view.
 - Renders the four layouts. Each pane is a real file editor, scrolled so
   `first` is at the top, with `first`–`last` highlighted, and captioned
   `n/N · <view title or deck title> · <relative path>:<range>`.

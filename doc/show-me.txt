@@ -65,7 +65,7 @@ state_dir       Where decks are stored. Default: stdpath('state')/show-me.
 <Plug>(show-me-close)                               Close the show-me tab
 
 ==============================================================================
-5. COMMANDS                                                  *:ShowMe*
+5. COMMANDS                               *show-me-commands* *:ShowMe*
 
 :ShowMe {n}     Open view {n} of the current deck.
 :ShowMe         Pick a recent deck; it becomes current and opens at view 1.

@@ -91,12 +91,14 @@ See `:help show-me` for everything.
 
 ## How agents find your editor
 
-Each editor registers itself in `~/.local/state/show-me/editors/`. The CLI
-picks the editor whose working directory is closest to the agent's. Inside a
-git worktree, it also considers the repository's main checkout. So an agent
-anywhere under `~/repos` reaches a Neovim started in `~/repos`. Run
-`show-me editors` to see what's registered. The full contract is in
-[`protocol/PROTOCOL.md`](protocol/PROTOCOL.md).
+Each editor registers itself in `$XDG_STATE_HOME/show-me/editors/`, which
+defaults to `~/.local/state/show-me/editors/`. On Windows it is
+`%LOCALAPPDATA%\show-me\editors\`. `SHOW_ME_HOME` overrides the base, making
+the registry `$SHOW_ME_HOME/editors/`. The CLI picks the editor whose working
+directory is closest to the agent's. Inside a git worktree, it also considers
+the repository's main checkout. So an agent anywhere under `~/repos` reaches a
+Neovim started in `~/repos`. Run `show-me editors` to see what's registered.
+The full contract is in [`protocol/PROTOCOL.md`](protocol/PROTOCOL.md).
 
 ## License
 
