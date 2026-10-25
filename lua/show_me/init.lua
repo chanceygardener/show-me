@@ -181,12 +181,16 @@ function M.setup(opts)
       render.on_tab_closed()
     end,
   })
-  -- Neovim has no SessionWritePre event; Post is the closest built-in hook, so
-  -- the tab is closed right after a write (see the task-9 report).
+  -- Neovim has no SessionWritePre, so the show-me tab can't be closed before a
+  -- session is written. Close it after the write and rewrite the session file
+  -- without it. The nested write re-fires this event; with the tab gone it is a no-op.
   vim.api.nvim_create_autocmd('SessionWritePost', {
     group = group,
     callback = function()
-      render.close()
+      if render.tab() then
+        render.close()
+        vim.cmd('mksession! ' .. vim.fn.fnameescape(vim.v.this_session))
+      end
     end,
   })
 
