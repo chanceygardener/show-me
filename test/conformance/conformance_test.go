@@ -25,6 +25,10 @@ var repoRoot, cliPath string
 
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("nvim"); err != nil {
+		if os.Getenv("CI") != "" {
+			fmt.Println("conformance: nvim not on PATH; CI must install it")
+			os.Exit(1)
+		}
 		fmt.Println("conformance: nvim not on PATH; skipping")
 		os.Exit(0)
 	}
