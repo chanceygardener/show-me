@@ -162,6 +162,8 @@ render.open(three, 2)
 close_panes(render.tab())
 render.step(-1)
 sidebars, panes = split_wins(render.tab())
+T.eq(#sidebars, 1, 'the right-hand sidebar is kept')
+T.eq(#panes, 3, 'all three panes open beside it')
 local side_col = vim.api.nvim_win_get_position(sidebars[1])[2]
 T.ok(
   vim.iter(panes):all(function(w)
