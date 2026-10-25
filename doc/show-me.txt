@@ -1,0 +1,80 @@
+*show-me.txt*  Let terminal agents show you code while they explain it
+
+==============================================================================
+CONTENTS                                                     *show-me*
+
+  1. Introduction ........................... |show-me-intro|
+  2. Setup .................................. |show-me-setup|
+  3. Options ................................ |show-me-options|
+  4. Mappings ............................... |show-me-mappings|
+  5. Commands ............................... |show-me-commands|
+  6. Highlights ............................. |show-me-highlights|
+
+==============================================================================
+1. INTRODUCTION                                              *show-me-intro*
+
+A coding agent in another terminal runs the `show-me` CLI to build a deck of
+numbered views: one of four layouts (single, cols2, cols3, main-stack), each
+pane a file scrolled to and highlighting a line range. When the deck is done
+you get a notification; you open the views when you're ready. show-me never
+moves focus on its own.
+
+Agents find this Neovim through a registry entry pointing at Neovim's own RPC
+server (|v:servername|). See protocol/PROTOCOL.md in the plugin directory.
+
+==============================================================================
+2. SETUP                                                     *show-me-setup*
+
+>lua
+    require('show_me').setup({})
+<
+setup() registers this Neovim (at |VimEnter|, or at once if that has already
+happened), defines the mappings and |:ShowMe|, and keeps the show-me tab out of
+sessions: after any |:mksession| (|SessionWritePost|) it closes the tab and
+rewrites the session file without it.
+
+==============================================================================
+3. OPTIONS                                                   *show-me-options*
+
+keys            Table, or false for no mappings (only |show-me-<Plug>|).
+                  view_prefix  '<leader>v'   followed by 1-9
+                  next         ']v'
+                  prev         '[v'
+                  pick         '<leader>vd'
+                  close        '<leader>vq'
+
+sidebar         filetypes  { 'neo-tree', 'NvimTree' }
+                  Windows of these filetypes are sidebars: mirrored into the
+                  show-me tab when it opens and kept, at their width, across
+                  view switches. A list you give replaces this one.
+                open       { [filetype] = function() ... end }
+                  How to open each sidebar in the show-me tab.
+
+picker          'auto' (snacks if loaded, else |vim.ui.select()|),
+                'snacks' or 'select'.
+
+state_dir       Where decks are stored. Default: stdpath('state')/show-me.
+
+==============================================================================
+4. MAPPINGS                                   *show-me-mappings* *show-me-<Plug>*
+
+<Plug>(show-me-view-1) ... <Plug>(show-me-view-9)   Open view N
+<Plug>(show-me-next)                                Next view (show-me tab only)
+<Plug>(show-me-prev)                                Previous view (show-me tab only)
+<Plug>(show-me-pick)                                Pick a recent deck
+<Plug>(show-me-close)                               Close the show-me tab
+
+==============================================================================
+5. COMMANDS                                                  *:ShowMe*
+
+:ShowMe {n}     Open view {n} of the current deck.
+:ShowMe         Pick a recent deck; it becomes current and opens at view 1.
+
+:checkhealth show_me   Check the RPC server, the registry entry and the CLI.
+
+==============================================================================
+6. HIGHLIGHTS                                            *show-me-highlights*
+
+ShowMeRange     The highlighted line range. Linked to |hl-Visual| by default.
+
+ vim:tw=78:ts=8:ft=help:norl:

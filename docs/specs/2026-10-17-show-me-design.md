@@ -390,8 +390,7 @@ registry is derived from the configured keys (`:ShowMe 1` when `keys = false`).
   views closes only show-me's own panes, never a sidebar, and layouts are built in the
   space beside it with the sidebar's width fixed (`winfixwidth`) so equalising doesn't
   stretch it.
-- **Sessions.** A `SessionWritePre` autocmd closes the show-me tab, replacing the
-  auto-session-specific hook, so any session plugin built on `:mksession` is covered.
+- **Sessions.** Neovim has no `SessionWritePre`, so a `SessionWritePost` autocmd closes the show-me tab and rewrites the session file (`:mksession!` on `v:this_session`). This replaces the auto-session-specific hook, so any session plugin built on `:mksession` is covered.
 - **Picker.** `vim.ui.select` by default, so snacks is optional.
 - **Transport.** No socket of its own; the registry points at `v:servername`.
 - **Validation** moves to the CLI; `rpc.handle` trusts pane paths and ranges but still
