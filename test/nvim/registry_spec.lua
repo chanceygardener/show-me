@@ -51,6 +51,18 @@ local touched = read(file)
 T.ok(touched.focused_at > entry.focused_at, 'touch moves focused_at')
 T.eq(touched.started_at, entry.started_at, 'touch keeps started_at')
 
+local before_failure = table.concat(vim.fn.readfile(file), '\n')
+local real_fs_write = vim.uv.fs_write
+vim.uv.fs_write = function()
+  return nil, 'ENOSPC: simulated'
+end
+local failed_file, reason = registry.write()
+vim.uv.fs_write = real_fs_write
+T.nil_(failed_file, 'a failed write returns no file')
+T.ok(reason and reason:find('ENOSPC', 1, true), 'a failed write says why')
+T.nil_(vim.uv.fs_stat(file .. '.tmp'), 'a failed write leaves no temp file')
+T.eq(table.concat(vim.fn.readfile(file), '\n'), before_failure, 'a failed write leaves the entry unchanged')
+
 registry.remove()
 T.nil_(vim.uv.fs_stat(file), 'remove deletes the entry')
 

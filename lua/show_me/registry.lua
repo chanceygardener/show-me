@@ -88,8 +88,14 @@ function M.write()
   private_dir(vim.fs.dirname(file))
   local tmp = file .. '.tmp'
   local fd = assert(vim.uv.fs_open(tmp, 'w', tonumber('600', 8)))
-  vim.uv.fs_write(fd, vim.json.encode(M.entry()))
-  vim.uv.fs_close(fd)
+  local data = vim.json.encode(M.entry())
+  local wrote, write_err = vim.uv.fs_write(fd, data)
+  local _, close_err = vim.uv.fs_close(fd)
+  local err = write_err or close_err or (wrote ~= #data and 'short write to ' .. tmp) or nil
+  if err then
+    os.remove(tmp)
+    return nil, err
+  end
   assert(vim.uv.fs_rename(tmp, file))
   return file
 end
