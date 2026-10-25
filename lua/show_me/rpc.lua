@@ -29,13 +29,17 @@ end
 ---@type table<string, fun(req: ShowMeRequest): table>
 local COMMANDS = {
   deck = function(req)
-    return { deck = state.store():create(req.title).id }
+    local deck_store = state.store()
+    local id = deck_store:create(req.title).id
+    state.remember(id, deck_store)
+    return { deck = id }
   end,
   view = function(req)
-    return { view = state.store():add_view(req.deck, req.view) }
+    return { view = state.store_for(req.deck):add_view(req.deck, req.view) }
   end,
   done = function(req)
-    local d = state.store():finish(req.deck)
+    local d = state.store_for(req.deck):finish(req.deck)
+    state.forget(req.deck)
     state.set_current(d)
     announce(d)
     return { deck = d.id, views = #d.views, open_hint = config.open_hint() }

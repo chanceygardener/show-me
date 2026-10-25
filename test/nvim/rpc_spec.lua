@@ -51,4 +51,22 @@ T.eq(vim.json.decode(rpc.handle('{oops')).error, 'request is not JSON', 'malform
 state.set_workspace(T.tmpdir())
 T.eq(call({ command = 'status' }).result.current, vim.NIL, 'no current deck is null')
 
+-- A `:cd` mid-deck must not send the agent's later calls to another workspace.
+state.set_workspace(T.tmpdir())
+T.eq(call({ command = 'deck', title = 'Workspace A deck' }).result.deck, 1, 'deck 1 in workspace A')
+local workspace_b = vim.uv.fs_realpath(T.tmpdir())
+local store_b = require('show_me.store').for_workspace(config.options.state_dir, workspace_b)
+store_b:create 'Workspace B deck'
+state.set_workspace(workspace_b)
+local seen = #notes
+T.eq(call({ command = 'view', deck = 1, view = { layout = 'single', panes = { pane } } }).ok, true, 'view after :cd ok')
+T.eq(call({ command = 'done', deck = 1 }).ok, true, 'done after :cd ok')
+vim.wait(200, function()
+  return #notes > seen
+end)
+T.eq(notes[seen + 1], 'show-me: Workspace A deck · 1 view · <leader>v1', 'done after :cd finishes the deck it started')
+local deck_b = store_b:get(1)
+T.eq(deck_b.done, false, "workspace B's deck 1 is not done")
+T.eq(#deck_b.views, 0, "workspace B's deck 1 has no views")
+
 T.done()
