@@ -63,6 +63,30 @@ T.ok(reason and reason:find('ENOSPC', 1, true), 'a failed write says why')
 T.nil_(vim.uv.fs_stat(file .. '.tmp'), 'a failed write leaves no temp file')
 T.eq(table.concat(vim.fn.readfile(file), '\n'), before_failure, 'a failed write leaves the entry unchanged')
 
+---Run `registry.write()` with one `vim.uv` function failing.
+---@param name string
+---@return string|nil file
+---@return string|nil reason
+local function write_with_failing(name)
+  local real = vim.uv[name]
+  vim.uv[name] = function()
+    return nil, 'EACCES: simulated ' .. name
+  end
+  local ok, written, why = pcall(registry.write)
+  vim.uv[name] = real
+  T.ok(ok, ('a failed %s does not raise (%s)'):format(name, tostring(written)))
+  return written, why
+end
+
+for _, name in ipairs { 'fs_open', 'fs_rename' } do
+  local written, why = write_with_failing(name)
+  T.nil_(written, ('a failed %s returns no file'):format(name))
+  T.ok(why and why:find(name, 1, true), ('a failed %s says why'):format(name))
+  T.nil_(vim.uv.fs_stat(file .. '.tmp'), ('a failed %s leaves no temp file'):format(name))
+  T.eq(table.concat(vim.fn.readfile(file), '\n'), before_failure, ('a failed %s leaves the entry unchanged'):format(name))
+end
+T.eq(select('#', registry.touch()), 0, 'touch returns nothing, as an autocmd callback must')
+
 registry.remove()
 T.nil_(vim.uv.fs_stat(file), 'remove deletes the entry')
 

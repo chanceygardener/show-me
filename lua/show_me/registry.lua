@@ -87,7 +87,10 @@ function M.write()
   private_dir(M.base_dir())
   private_dir(vim.fs.dirname(file))
   local tmp = file .. '.tmp'
-  local fd = assert(vim.uv.fs_open(tmp, 'w', tonumber('600', 8)))
+  local fd, open_err = vim.uv.fs_open(tmp, 'w', tonumber('600', 8))
+  if not fd then
+    return nil, open_err
+  end
   local data = vim.json.encode(M.entry())
   local wrote, write_err = vim.uv.fs_write(fd, data)
   local _, close_err = vim.uv.fs_close(fd)
@@ -96,7 +99,12 @@ function M.write()
     os.remove(tmp)
     return nil, err
   end
-  assert(vim.uv.fs_rename(tmp, file))
+  -- On Windows the rename fails while a CLI has the old entry open.
+  local renamed, rename_err = vim.uv.fs_rename(tmp, file)
+  if not renamed then
+    os.remove(tmp)
+    return nil, rename_err
+  end
   return file
 end
 
