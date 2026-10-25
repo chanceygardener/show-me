@@ -8,6 +8,7 @@ package registry
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -71,7 +72,11 @@ func (r Ranking) ByPID(pid int) (Candidate, bool) {
 }
 
 // Locate reads the registry and ranks the editors for an agent working in cwd.
+// SHOW_ME_EDITOR, when set, names the one entry file to use instead.
 func Locate(cwd string) (Ranking, error) {
+	if file := os.Getenv("SHOW_ME_EDITOR"); file != "" {
+		return locateOverride(file, cwd)
+	}
 	base, err := BaseDir()
 	if err != nil {
 		return Ranking{}, err
@@ -84,6 +89,39 @@ func Locate(cwd string) (Ranking, error) {
 	targets := Targets(cwd)
 	ranked, incompatible := Rank(all, targets)
 	return Ranking{Dir: dir, Targets: targets, All: all, Ranked: ranked, Incompatible: incompatible}, nil
+}
+
+// locateOverride ranks just the editor registered in file, if it is running.
+// Its file is never deleted: the user chose it, so it isn't the CLI's to tidy.
+func locateOverride(file, cwd string) (Ranking, error) {
+	c, err := ReadEntry(file)
+	if err != nil {
+		return Ranking{}, fmt.Errorf("SHOW_ME_EDITOR: %w", err)
+	}
+	r := Ranking{Dir: filepath.Dir(file), Targets: []string{cwd}}
+	if !alive(c.Entry.PID) {
+		return r, nil
+	}
+	r.All = []Candidate{c}
+	if c.Entry.Protocol == protocol.Version {
+		r.Ranked = r.All
+	} else {
+		r.Incompatible = r.All
+	}
+	return r, nil
+}
+
+// ReadEntry reads and parses one entry file, whether or not its editor is running.
+func ReadEntry(file string) (Candidate, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return Candidate{}, err
+	}
+	var entry protocol.Entry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return Candidate{}, fmt.Errorf("%s: %w", file, err)
+	}
+	return Candidate{File: file, Entry: entry}, nil
 }
 
 // Read returns every live entry in dir. Files whose editor has exited are
@@ -101,20 +139,15 @@ func Read(dir string) ([]Candidate, error) {
 		if item.IsDir() || filepath.Ext(item.Name()) != ".json" {
 			continue
 		}
-		file := filepath.Join(dir, item.Name())
-		data, err := os.ReadFile(file)
+		c, err := ReadEntry(filepath.Join(dir, item.Name()))
 		if err != nil {
 			continue
 		}
-		var entry protocol.Entry
-		if json.Unmarshal(data, &entry) != nil {
+		if !alive(c.Entry.PID) {
+			_ = os.Remove(c.File)
 			continue
 		}
-		if !alive(entry.PID) {
-			_ = os.Remove(file)
-			continue
-		}
-		live = append(live, Candidate{File: file, Entry: entry})
+		live = append(live, c)
 	}
 	return live, nil
 }

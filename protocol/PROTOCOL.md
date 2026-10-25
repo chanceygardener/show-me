@@ -103,6 +103,8 @@ milliseconds. `focused_at` is updated whenever the editor gains focus.
 
 A deck handle skips steps 1–3 and goes straight to its pid's entry.
 
+`SHOW_ME_EDITOR=<path to an entry file>` bypasses steps 1–3.
+
 ### Requests and replies
 
 One JSON request, one JSON reply:

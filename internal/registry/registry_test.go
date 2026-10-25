@@ -176,3 +176,57 @@ func TestTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestLocateHonoursEditorOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("SHOW_ME_HOME", home)
+	cwd := t.TempDir()
+	writeEntry(t, EditorsDir(home), "nvim-registered.json", protocol.Entry{Protocol: 1, Editor: "nvim", PID: os.Getpid(), WorkspaceFolders: []string{cwd}})
+	pinned := t.TempDir()
+	for proto, wantRanked := range map[int]bool{protocol.Version: true, protocol.Version + 1: false} {
+		file := writeEntry(t, pinned, "chosen.json", protocol.Entry{Protocol: proto, Editor: "nvim", PID: os.Getpid(), WorkspaceFolders: []string{"/elsewhere"}})
+		t.Setenv("SHOW_ME_EDITOR", file)
+		r, err := Locate(cwd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Dir != pinned || strings.Join(r.Targets, "|") != cwd || names(r.All) != file {
+			t.Fatalf("protocol %d: Dir %s, Targets %v, All %s", proto, r.Dir, r.Targets, names(r.All))
+		}
+		ranked, incompatible := names(r.Ranked), names(r.Incompatible)
+		if wantRanked && (ranked != file || incompatible != "") || !wantRanked && (ranked != "" || incompatible != file) {
+			t.Errorf("protocol %d: Ranked %q, Incompatible %q", proto, ranked, incompatible)
+		}
+	}
+}
+
+func TestLocateEditorOverrideForAnExitedEditor(t *testing.T) {
+	t.Setenv("SHOW_ME_HOME", t.TempDir())
+	file := writeEntry(t, t.TempDir(), "gone.json", protocol.Entry{Protocol: 1, Editor: "nvim", PID: deadPID(t)})
+	t.Setenv("SHOW_ME_EDITOR", file)
+	r, err := Locate(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.All)+len(r.Ranked)+len(r.Incompatible) != 0 {
+		t.Errorf("an exited editor was ranked: %+v", r)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("the override's entry file must be left alone: %v", err)
+	}
+}
+
+func TestLocateEditorOverrideThatCannotBeRead(t *testing.T) {
+	t.Setenv("SHOW_ME_HOME", t.TempDir())
+	dir := t.TempDir()
+	broken := filepath.Join(dir, "broken.json")
+	if err := os.WriteFile(broken, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{filepath.Join(dir, "missing.json"), broken} {
+		t.Setenv("SHOW_ME_EDITOR", file)
+		if _, err := Locate(t.TempDir()); err == nil || !strings.Contains(err.Error(), "SHOW_ME_EDITOR") {
+			t.Errorf("%s: want an error naming SHOW_ME_EDITOR, got %v", filepath.Base(file), err)
+		}
+	}
+}

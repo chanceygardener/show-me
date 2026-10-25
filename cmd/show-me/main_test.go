@@ -265,3 +265,14 @@ func TestEditors(t *testing.T) {
 		t.Fatalf("stdout %q", h.out.String())
 	}
 }
+
+func TestUnreadableEditorOverride(t *testing.T) {
+	t.Setenv("SHOW_ME_HOME", t.TempDir())
+	t.Setenv("SHOW_ME_EDITOR", filepath.Join(t.TempDir(), "missing.json"))
+	h := newHarness(t)
+	h.app.locate = registry.Locate
+	expect(t, h, h.run("deck", "x"), exitUnreachable, "")
+	if !strings.Contains(h.err.String(), "SHOW_ME_EDITOR") {
+		t.Fatalf("stderr %q", h.err.String())
+	}
+}
