@@ -106,6 +106,8 @@ included) put the repository root on `runtimepath`.
 | `lua/show_me/init.lua` | `setup(opts)`, user commands, keymaps, public API (`open`, `step`, `pick`, `close`, `status`) |
 | `lua/show_me/config.lua` | Option types, defaults and merging |
 | `lua/show_me/registry.lua` | Write, refresh and remove this editor's registry entry |
+| `lua/show_me/state.lua` | Session state: the workspace served, its store, the current deck |
+| `lua/show_me/util.lua` | `now_ms()`, the one helper shared by store and registry |
 | `lua/show_me/rpc.lua` | `handle(json) → json`: the protocol entry point called by the CLI |
 | `lua/show_me/store.lua` | Deck persistence, editor-side rejections, pruning, current deck |
 | `lua/show_me/layout.lua` | The four layout builders (ported, sidebar-aware) |
@@ -114,11 +116,11 @@ included) put the repository root on `runtimepath`.
 | `doc/show-me.txt` | Vim help |
 | `cmd/show-me/main.go` | CLI entry: argument parsing, exit codes |
 | `internal/protocol/` | Request/response types (source of truth for the JSON Schema), version constant |
-| `internal/pane/` | `path[:N[-M]]` parsing, path resolution, file and range checks |
+| `internal/check/` | Stateless request checks: deck titles, layouts, pane counts, `path[:N[-M]]` parsing, file and range checks |
 | `internal/registry/` | Registry directory location, reading entries, choosing an editor |
-| `internal/transport/` | One client per transport kind: `nvim` (msgpack-RPC) and `ndjson` (VS Code) |
+| `internal/transport/` | One client per transport kind: `nvim` (msgpack-RPC) in phase 1, `ndjson` (VS Code) added in phase 2 |
 | `protocol/PROTOCOL.md` | The agent- and editor-facing contract |
-| `protocol/schema.json` | Generated from `internal/protocol` by `go generate` |
+| `protocol/schema.json` | Generated from `internal/protocol` by `go generate` (phase 2, when the VS Code extension consumes it) |
 | `skills/show-me/SKILL.md` | Agent instructions, editor-neutral |
 | `install.sh`, `install.ps1` | Installers (also published as release assets) |
 | `vscode/` | The VS Code extension (phase 2) |
@@ -262,9 +264,9 @@ Transport framing:
 ### CLI surface
 
 ```
-show-me deck <title>                                         → deck <id>
-show-me view <deck-id> <layout> [--title T] [--] <pane>...   → view <n>
-show-me done <deck-id>                                       → done <id>
+show-me deck <title>                                         → deck <n>@<pid>
+show-me view <deck> <layout> [--title T] [--] <pane>...      → view <n>
+show-me done <deck>                                          → done <n>@<pid>
                                                                open: <open_hint>
 show-me status                                               → editor, workspace, current deck
 show-me editors                                              → every registry entry, marking the one that would be chosen
@@ -272,6 +274,13 @@ show-me version                                              → CLI version and
 ```
 
 `--` ends options, so a pane path starting with `-` works.
+
+**Deck handles.** `deck` prints `<n>@<pid>`: the deck number and the pid of the editor
+holding it. `view` and `done` given a handle go straight to that editor's registry
+entry (exit 3 if it has exited), so a deck can't drift to another editor when the user
+switches focus between two editors in the same folder mid-deck. A bare `<n>` is also
+accepted and routed by the normal choice rules. Agents copy the handle verbatim; they
+cite views, never decks, in prose.
 
 **Exit codes:** `0` ok · `1` rejected (reason on stderr) · `2` usage error, including an
 unknown subcommand · `3` no reachable editor (stderr lists what was tried) · `4` editors
@@ -340,7 +349,7 @@ Every editor implements:
 
 ```lua
 {
-  '<owner>/show-me',
+  'chanceygardener/show-me',
   build = function(plugin) vim.system({ 'sh', plugin.dir .. '/install.sh', '--for-plugin', plugin.dir }):wait() end,
   event = 'VeryLazy',
   opts = {},
@@ -433,10 +442,10 @@ and `ask`. No → record what failed in `vscode/NOTES.md`; the setting keeps one
 `install.sh` (POSIX sh) and `install.ps1`, published as release assets:
 
 ```sh
-curl -fsSL https://github.com/<owner>/show-me/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/chanceygardener/show-me/releases/latest/download/install.sh | sh
 ```
 ```powershell
-irm https://github.com/<owner>/show-me/releases/latest/download/install.ps1 | iex
+irm https://github.com/chanceygardener/show-me/releases/latest/download/install.ps1 | iex
 ```
 
 Steps:
@@ -452,7 +461,7 @@ Steps:
    `~/.cursor/skills/show-me`, by symlink on POSIX and by copy on Windows, skipping an
    agent whose home directory doesn't exist.
 
-Flags: `--version <tag>`, `--for-plugin <dir>`, `--no-skill`, `--prefix <dir>`.
+Flags: `--version <tag>`, `--for-plugin <dir>`, `--no-skill`, `--bin-dir <dir>` (where the `PATH` link goes; default `~/.local/bin`).
 Re-running is safe and upgrades in place.
 
 macOS signing: Go's linker ad-hoc signs arm64 binaries, and `curl` does not set the
@@ -547,10 +556,10 @@ SmartScreen prompt from PowerShell download).
 - `CONTRIBUTING.md`: how to add an editor (the checklist in [Editor
   responsibilities](#editor-responsibilities-both-editors) plus the conformance suite).
 
-## Open items
+## Ownership
 
-- **GitHub owner** for the module path, plugin spec and install URLs (`<owner>` above).
-- **License.** MIT suggested.
+- GitHub: `chanceygardener/show-me`; Go module `github.com/chanceygardener/show-me`.
+- License: MIT.
 
 ## Later
 
