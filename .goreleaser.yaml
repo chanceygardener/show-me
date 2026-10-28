@@ -1,0 +1,32 @@
+# Release builds: six binaries, archives named without the version so
+# install.sh can fetch releases/latest/download/<asset>, and checksums.
+version: 2
+project_name: show-me
+
+builds:
+  - main: ./cmd/show-me
+    binary: show-me
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+
+archives:
+  - name_template: "show-me_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - src: skills/show-me/*
+        dst: skills/show-me
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  extra_files:
+    - glob: ./install.sh
+    - glob: ./install.ps1

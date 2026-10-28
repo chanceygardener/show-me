@@ -390,8 +390,7 @@ registry is derived from the configured keys (`:ShowMe 1` when `keys = false`).
   views closes only show-me's own panes, never a sidebar, and layouts are built in the
   space beside it with the sidebar's width fixed (`winfixwidth`) so equalising doesn't
   stretch it.
-- **Sessions.** A `SessionWritePre` autocmd closes the show-me tab, replacing the
-  auto-session-specific hook, so any session plugin built on `:mksession` is covered.
+- **Sessions.** Neovim has no `SessionWritePre`, so a `SessionWritePost` autocmd closes the show-me tab and rewrites the session file (`:mksession!` on `v:this_session`). This replaces the auto-session-specific hook, so any session plugin built on `:mksession` is covered.
 - **Picker.** `vim.ui.select` by default, so snacks is optional.
 - **Transport.** No socket of its own; the registry points at `v:servername`.
 - **Validation** moves to the CLI; `rpc.handle` trusts pane paths and ranges but still
@@ -506,9 +505,9 @@ After phase 1 ships, in the kickstart.nvim repository:
 
 ## Phases
 
-1. **Core and Neovim.** Repository skeleton, Go CLI, protocol document and schema,
-   registry, Neovim plugin port with the sidebar and session changes, skill, installers,
-   CI on three OSes, first release. Then the kickstart.nvim migration.
+1. **Core and Neovim.** Repository skeleton, Go CLI, protocol document (schema in
+   phase 2), registry, Neovim plugin port with the sidebar and session changes, skill,
+   installers, CI on three OSes, first release. Then the kickstart.nvim migration.
 2. **VS Code, `currentWindow`.** Extension, generated TypeScript types, conformance
    suite run against it, Marketplace and Open VSX publishing.
 3. **Floating-window spike**, then `newWindow` and `ask` if it succeeds.
