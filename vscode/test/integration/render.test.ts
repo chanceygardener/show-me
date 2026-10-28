@@ -171,13 +171,14 @@ suite('currentWindow rendering', () => {
     assert.deepEqual(tabsIn(3).map(t => t.uri), [uriOf('other.txt')]);
   });
 
-  test('a smaller view keeps a tab the user opened in a group it drops', async () => {
+  test('a smaller view keeps the group of a tab the user opened in it', async () => {
     await renderer.open(deck, 3);
     await openUser('user.txt', 3);
     await renderer.step(-1);
     const open = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => (t.input as vscode.TabInputText).uri.toString());
     assert.deepEqual(open.sort(), [uriOf('c.txt'), uriOf('d.txt'), uriOf('user.txt')].sort());
-    assert.equal(vscode.window.tabGroups.all.length, 2);
+    assert.equal(vscode.window.tabGroups.all.length, 3);
+    assert.deepEqual(tabsIn(3).map(t => t.uri), [uriOf('user.txt')]);
   });
 
   test("a file the user reopens after closing show-me's tab for it is theirs", async () => {
@@ -200,5 +201,70 @@ suite('currentWindow rendering', () => {
     assert.deepEqual(tabsIn(1), []);
     assert.deepEqual(tabsIn(2).map(t => t.uri), [uriOf('user.txt'), uriOf('other.txt')]);
     assert.equal(tabsIn(2).find(t => t.active)?.uri, uriOf('other.txt'));
+  });
+
+  test('close leaves alone a group of show-me\'s holding a file the user opened there', async () => {
+    await openUser('user.txt', 1);
+    await renderer.open(deck, 3);
+    await openUser('other.txt', 2);
+    await renderer.close();
+    assert.deepEqual(tabsIn(1).map(t => t.uri), [uriOf('user.txt')]);
+    assert.deepEqual(tabsIn(2).map(t => ({ uri: t.uri, preview: t.preview })), [{ uri: uriOf('other.txt'), preview: false }]);
+    assert.equal(vscode.window.tabGroups.all.length, 2);
+  });
+
+  test('a user preview tab in a group show-me added stays a preview, in its group', async () => {
+    const ids = new GroupIds(vscode.window.createOutputChannel('show-me test ids', { log: true }));
+    await openUser('user.txt', 1);
+    await renderer.open(deck, 3);
+    await openUser('other.txt', 3, true);
+    const groupId = ids.of(vscode.window.tabGroups.all.find(g => g.viewColumn === 3)!)!;
+    await renderer.close();
+    const group = ids.group(groupId);
+    assert.ok(group, "the user's preview tab's group survives");
+    assert.deepEqual(group.tabs.map(t => [(t.input as vscode.TabInputText).uri.toString(), t.isPreview]), [[uriOf('other.txt'), true]]);
+    ids.dispose();
+  });
+
+  test('a group the user split off survives stepping to a view with as many panes', async () => {
+    const ids = new GroupIds(vscode.window.createOutputChannel('show-me test ids', { log: true }));
+    await openUser('user.txt', 1);
+    await renderer.open(deck, 2);
+    await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+    await vscode.commands.executeCommand('workbench.action.splitEditorRight');
+    const split = vscode.window.tabGroups.activeTabGroup;
+    const splitId = ids.of(split)!;
+    assert.equal(split.viewColumn, 3);
+    await renderer.step(1);
+    await renderer.close();
+    const group = ids.group(splitId);
+    assert.ok(group, 'the split-off group survives');
+    assert.deepEqual(group.tabs.map(t => (t.input as vscode.TabInputText).uri.toString()), [uriOf('d.txt')]);
+    ids.dispose();
+  });
+
+  test('views opened without waiting for each other still restore the user\'s window', async () => {
+    await openUser('user.txt', 1);
+    await Promise.all([renderer.open(deck, 3), renderer.open(deck, 1)]);
+    await renderer.close();
+    assert.equal(vscode.window.tabGroups.all.length, 1);
+    assert.deepEqual(tabsIn(1).map(t => t.uri), [uriOf('user.txt')]);
+  });
+
+  test("a created tab the user pinned is theirs and stays open", async () => {
+    await renderer.open(deck, 1);
+    await vscode.commands.executeCommand('workbench.action.pinEditor');
+    await renderer.close();
+    assert.deepEqual(tabsIn(1).map(t => t.uri), [uriOf('a.txt')]);
+  });
+
+  test('a group the user moves during a view keeps its tabs', async () => {
+    await openUser('user.txt', 1);
+    await renderer.open(deck, 2);
+    await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+    await vscode.commands.executeCommand('workbench.action.moveActiveEditorGroupLeft');
+    await renderer.close();
+    const tabs = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => (t.input as vscode.TabInputText).uri.toString());
+    assert.equal(tabs.filter(uri => uri === uriOf('user.txt')).length, 1);
   });
 });

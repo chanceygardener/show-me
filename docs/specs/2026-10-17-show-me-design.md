@@ -434,12 +434,22 @@ Settled before and during planning:
 - **Never shrink, judged against the user's own groups.** A view's layout is applied
   when the user's group count at snapshot time is at most the view's pane count.
   Otherwise the view fills groups 1…N and the geometry is the user's.
-- **Restore check.** At close, the snapshot is restored only if the window's group
-  count still equals the count show-me left after its last view, taken before show-me
-  closes anything (`workbench.editor.closeEmptyGroups` removes groups as tabs close).
+- **Restore check.** At close, the snapshot is restored only if the window's groups,
+  taken before show-me closes anything, are exactly the snapshot's groups plus the groups
+  show-me's views added, minus the ones they removed (compared as sets of group ids, not
+  counts). After show-me closes its tabs, every group its views added must be empty.
+  Otherwise the layout is left as it is. Leaving show-me's layout in place is acceptable;
+  moving or pinning a user's tab is not.
+- **No layout drops a group holding a tab.** `vscode.setEditorLayout` merges the tabs of
+  the groups it drops into the last group it keeps, and moving a tab pins it. show-me
+  skips any layout (a view's shrinking layout, or the restored snapshot) that would drop
+  a group still holding a tab, and logs it.
+- **One operation at a time.** Opening, stepping and closing a view are queued in the
+  order they were asked for, so two key presses can't interleave.
 - **Switching order.** Open the new view's panes first, then close created tabs the new
   view doesn't reuse.
-- **A created tab the user has since edited** (`isDirty`) is the user's: left open and logged.
+- **A created tab the user has since edited** (`isDirty`) **or pinned** (`isPinned`) is the
+  user's: left open and logged.
 - **Borrowed preview tabs stay preview tabs.**
 - **Active tabs that aren't text editors** can't be re-activated through the API, so
   restoring skips them.

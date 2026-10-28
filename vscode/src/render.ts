@@ -6,7 +6,11 @@
  * pane i as the active tab of group i, scrolls its range to the top and
  * highlights it. Tabs the user already had open are borrowed, never closed;
  * tabs show-me created are closed when no longer needed. Closing restores the
- * snapshot unless the user has reshaped the window since.
+ * snapshot only while the window holds exactly the user's groups plus the
+ * ones show-me's views added, and those added groups are empty. show-me never
+ * applies a layout that would drop a group still holding a tab: dropping
+ * merges its tabs into another group and pins them. Opening, stepping and
+ * closing run one at a time, in the order they were asked for.
  *
  * Groups are tracked by a `GroupId`, which stays put for a group's lifetime,
  * because a group's view column shifts when the user splits a group or
@@ -15,7 +19,7 @@
  */
 import * as vscode from 'vscode';
 import { caption } from './core/format.ts';
-import { layoutFor, shouldApplyLayout } from './core/layout.ts';
+import { groupCount, layoutFor, shouldApplyLayout } from './core/layout.ts';
 import type { EditorLayout, Snapshot } from './core/layout.ts';
 import type { Pane } from './core/protocol.gen.ts';
 import type { Deck } from './core/store.ts';
@@ -30,12 +34,13 @@ type Showing = {
   keys: TabKey[];
   /** Highlighted range per `column|uri`. */
   ranges: Map<string, vscode.Range>;
-  /** Group count right after this view opened, to tell whether the user reshaped the window. */
-  groups: number;
 };
 
-/** The snapshot plus the user's own groups, in column order, to find the ones closing removed. */
-type Before = { snapshot: Snapshot; groups: readonly (GroupId | undefined)[] };
+/**
+ * The snapshot plus the user's own groups, in column order, to find the ones closing removed;
+ * and the groups show-me's views added and removed, to tell whether the user reshaped the window.
+ */
+type Before = { snapshot: Snapshot; groups: readonly (GroupId | undefined)[]; added: Set<GroupId>; removed: Set<GroupId> };
 
 /** The groups show-me opened a created tab for `uri` in. */
 type Tracked = { uri: string; groups: Set<GroupId> };
@@ -60,6 +65,8 @@ export class Renderer implements vscode.Disposable {
   readonly #subscriptions: vscode.Disposable[];
   #before: Before | undefined;
   #showing: Showing | undefined;
+  /** The tail of the operations run so far; each new one starts when it settles. */
+  #queue: Promise<void> = Promise.resolve();
 
   constructor(log: vscode.LogOutputChannel) {
     this.#log = log;
@@ -78,15 +85,42 @@ export class Renderer implements vscode.Disposable {
     return this.#showing && { deck: this.#showing.deck, view: this.#showing.view };
   }
 
-  async open(deck: Deck, n: number): Promise<void> {
+  open(deck: Deck, n: number): Promise<void> {
+    return this.#serialize(() => this.#open(deck, n));
+  }
+
+  step(delta: number): Promise<void> {
+    return this.#serialize(async () => {
+      const showing = this.#showing;
+      if (showing && showing.deck.views[showing.view - 1 + delta]) await this.#open(showing.deck, showing.view + delta);
+    });
+  }
+
+  close(): Promise<void> {
+    return this.#serialize(() => this.#close());
+  }
+
+  dispose(): void {
+    for (const subscription of this.#subscriptions) subscription.dispose();
+  }
+
+  /** Run `op` once every earlier operation has settled. Callers see its result and report its errors. */
+  #serialize(op: () => Promise<void>): Promise<void> {
+    const run = this.#queue.then(op);
+    this.#queue = run.catch((error: unknown) => this.#log.debug(`an operation failed; later ones still run: ${String(error)}`));
+    return run;
+  }
+
+  async #open(deck: Deck, n: number): Promise<void> {
     const view = deck.views[n - 1];
     if (!view) return;
+    const start = this.#ids.live();
     this.#before ??= await this.#takeSnapshot();
-    const layout = shouldApplyLayout(this.#before.snapshot.groups.length, view.panes.length) ? layoutFor(view.layout, view.panes.length) : undefined;
-    // setEditorLayout merges the tabs of the groups it drops into the last group it keeps,
-    // out of reach of #closeTabs, so a layout with fewer groups waits until those are closed.
+    const before = this.#before;
+    const layout = shouldApplyLayout(before.snapshot.groups.length, view.panes.length) ? layoutFor(view.layout, view.panes.length) : undefined;
+    // A layout with fewer groups waits until the tabs this view doesn't reuse are closed.
     const shrinks = view.panes.length < vscode.window.tabGroups.all.length;
-    if (layout && !shrinks) await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
+    if (layout && !shrinks) await this.#applyLayout(layout);
     const keys = view.panes.map((pane, i) => ({ column: i + 1, uri: vscode.Uri.file(pane.path).toString() }));
     const ranges = new Map<string, vscode.Range>();
     for (const [i, pane] of view.panes.entries()) {
@@ -94,23 +128,19 @@ export class Renderer implements vscode.Disposable {
       if (range) ranges.set(id(keys[i]!), range);
     }
     await this.#closeTabs(this.#ledger.release(keys));
-    if (layout && shrinks) await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
-    this.#showing = { deck, view: n, keys, ranges, groups: vscode.window.tabGroups.all.length };
+    if (layout && shrinks) await this.#applyLayout(layout);
+    this.#account(before, start);
+    this.#showing = { deck, view: n, keys, ranges };
     await vscode.commands.executeCommand('setContext', VIEW_OPEN, true);
     this.#decorate(vscode.window.visibleTextEditors);
     this.#caption(vscode.window.activeTextEditor);
   }
 
-  async step(delta: number): Promise<void> {
-    const showing = this.#showing;
-    if (showing && showing.deck.views[showing.view - 1 + delta]) await this.open(showing.deck, showing.view + delta);
-  }
-
-  async close(): Promise<void> {
+  async #close(): Promise<void> {
     const showing = this.#showing;
     const before = this.#before;
     if (!showing || !before) return;
-    const reshaped = vscode.window.tabGroups.all.length !== showing.groups;
+    const reshaped = !this.#holdsOnlyKnownGroups(before);
     this.#showing = undefined;
     this.#before = undefined;
     await this.#closeTabs(this.#ledger.release());
@@ -118,22 +148,51 @@ export class Renderer implements vscode.Disposable {
     this.#status.hide();
     this.#decorate(vscode.window.visibleTextEditors);
     await vscode.commands.executeCommand('setContext', VIEW_OPEN, false);
-    if (reshaped) {
-      this.#log.info('the window was reshaped during a view; leaving its layout as it is');
-      return;
-    }
+    if (reshaped) return this.#log.info('the window was reshaped during a view; leaving its layout as it is');
+    const holding = [...before.added].flatMap(group => this.#ids.group(group)?.tabs ?? []);
+    if (holding.length > 0) return this.#log.info(`a group show-me added still holds ${holding.length} tab(s); leaving the layout as it is`);
+    await this.#restore(before);
+  }
+
+  /** Put the window back as the snapshot found it. */
+  async #restore(before: Before): Promise<void> {
     if (!before.groups.some(group => group !== undefined && this.#ids.group(group))) {
       this.#log.warn("none of the window's groups from before the view are left; leaving its layout as it is");
       return;
     }
     await this.#reinsertGroups(before.groups);
-    await vscode.commands.executeCommand('vscode.setEditorLayout', before.snapshot.layout);
+    if (!(await this.#applyLayout(before.snapshot.layout))) return;
     await Renderer.#focusGroup(before.snapshot.activeColumn);
     await Renderer.#restoreActiveTabs(before.snapshot);
   }
 
-  dispose(): void {
-    for (const subscription of this.#subscriptions) subscription.dispose();
+  /** Record the groups that appeared or went away while show-me opened a view. */
+  #account(before: Before, start: ReadonlySet<GroupId>): void {
+    const live = this.#ids.live();
+    for (const group of live) if (!start.has(group)) before.added.add(group);
+    for (const group of start) if (!live.has(group)) before.removed.add(group);
+  }
+
+  /** Whether the window holds exactly the user's groups plus the ones show-me's views added. */
+  #holdsOnlyKnownGroups(before: Before): boolean {
+    const known = new Set([...before.groups, ...before.added].filter((group): group is GroupId => group !== undefined && !before.removed.has(group)));
+    const live = this.#ids.live();
+    return live.size === known.size && [...live].every(group => known.has(group));
+  }
+
+  /**
+   * Apply `layout` unless it would drop a group that still holds a tab: setEditorLayout merges
+   * a dropped group's tabs into the last group it keeps, and moving a tab pins it.
+   */
+  async #applyLayout(layout: EditorLayout): Promise<boolean> {
+    const kept = groupCount(layout);
+    const holding = vscode.window.tabGroups.all.filter(group => group.viewColumn > kept && group.tabs.length > 0);
+    if (holding.length > 0) {
+      this.#log.info(`not applying a ${kept}-group layout: it would move the tabs of column(s) ${holding.map(g => g.viewColumn).join(', ')}`);
+      return false;
+    }
+    await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
+    return true;
   }
 
   /** Open `pane` in its group without replacing the user's preview tab; return its clamped range. */
@@ -188,9 +247,9 @@ export class Renderer implements vscode.Disposable {
     const tabs = keys.flatMap(key => {
       const found = this.#trackedTabs(key);
       this.#tracked.delete(id(key));
-      const dirty = found.filter(tab => tab.isDirty);
-      if (dirty.length > 0) this.#log.info(`leaving ${key.uri} open: it has unsaved changes`);
-      return found.filter(tab => !tab.isDirty);
+      const users = found.filter(tab => tab.isDirty || tab.isPinned);
+      if (users.length > 0) this.#log.info(`leaving ${key.uri} open: the user edited or pinned it`);
+      return found.filter(tab => !users.includes(tab));
     });
     if (tabs.length > 0) await vscode.window.tabGroups.close(tabs, true);
   }
@@ -245,7 +304,8 @@ export class Renderer implements vscode.Disposable {
       const tab = group.activeTab;
       return tab?.input instanceof vscode.TabInputText ? { activeUri: tab.input.uri.toString(), activePreview: tab.isPreview } : { activePreview: false };
     });
-    return { snapshot: { layout, groups, activeColumn: vscode.window.tabGroups.activeTabGroup.viewColumn }, groups: all.map(group => this.#ids.of(group)) };
+    const snapshot = { layout, groups, activeColumn: vscode.window.tabGroups.activeTabGroup.viewColumn };
+    return { snapshot, groups: all.map(group => this.#ids.of(group)), added: new Set(), removed: new Set() };
   }
 
   /**

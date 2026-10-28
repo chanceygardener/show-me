@@ -39,7 +39,9 @@ Each is also a command: `showMe.openView1`…`showMe.openView9`, `showMe.next`,
 
 Views lay over your current editor groups. show-me never closes your tabs,
 including ones with unsaved changes, and puts your layout back when you close
-the view (unless you reshaped the window meanwhile).
+the view (unless you reshaped the window or left a tab in one of show-me's
+groups meanwhile; then it leaves the layout as it is). Reloading the window
+mid-view forgets the view: show-me's tabs stay open as ordinary tabs.
 
 With VS Code's default sticky scroll on, a view's range is revealed below the
 sticky-scroll lines (up to 5 lines from the top), not on the literal top line.

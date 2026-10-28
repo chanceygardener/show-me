@@ -34,3 +34,8 @@ export function layoutFor(layout: View['layout'], panes: number): EditorLayout {
 export function shouldApplyLayout(userGroups: number, panes: number): boolean {
   return userGroups <= panes;
 }
+
+/** How many editor groups `layout` makes: one per leaf. */
+export function groupCount(layout: EditorLayout | GroupLayout): number {
+  return layout.groups?.length ? layout.groups.reduce((sum, group) => sum + groupCount(group), 0) : 1;
+}

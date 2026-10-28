@@ -6,7 +6,8 @@
  * (opening a tab, adding, removing or moving a group) replaces every group's
  * object, so an object kept from earlier is no longer in `tabGroups.all`.
  * Replaced groups are matched by position: `tabGroups.all` lists groups in the
- * order they were created, which moving a group doesn't change.
+ * order they were created, which moving a group doesn't change. That match must
+ * agree with the groups' column order, or no group is matched.
  */
 import * as vscode from 'vscode';
 
@@ -52,14 +53,22 @@ export class GroupIds implements vscode.Disposable {
 
   /**
    * Ids for `kept`, the surviving groups' replacement objects, taken from the surviving old
-   * objects in the same order. If the counts disagree, the survivors get new ids: show-me then
-   * loses track of its tabs and leaves them open rather than risk closing a user's.
+   * objects in the same order. If the counts or the column orders disagree (a group moved, or
+   * the creation order isn't what it seems), the survivors get new ids: show-me then loses track
+   * of its tabs and leaves them, and the layout, alone rather than risk touching a user's.
    */
   #matchReplaced(kept: readonly vscode.TabGroup[], closed: readonly vscode.TabGroup[]): GroupId[] {
     const survivors = [...this.#ids.keys()].filter(group => !closed.includes(group));
-    if (survivors.length === kept.length) return survivors.map(group => this.#ids.get(group)!);
+    if (survivors.length === kept.length && GroupIds.#sameColumnOrder(survivors, kept)) return survivors.map(group => this.#ids.get(group)!);
     this.#log.warn(`could not match ${kept.length} replaced editor groups to ${survivors.length} known ones; forgetting them`);
     return kept.map(() => this.#fresh());
+  }
+
+  /** Whether `a[i]` and `b[i]` hold the same rank by view column, for every i. */
+  static #sameColumnOrder(a: readonly vscode.TabGroup[], b: readonly vscode.TabGroup[]): boolean {
+    const ranks = (groups: readonly vscode.TabGroup[]): number[] => groups.map((_, i) => i).sort((i, j) => groups[i]!.viewColumn - groups[j]!.viewColumn);
+    const [x, y] = [ranks(a), ranks(b)];
+    return x.every((index, rank) => index === y[rank]);
   }
 
   #fresh(): GroupId {

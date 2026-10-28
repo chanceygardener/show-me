@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { layoutFor, shouldApplyLayout } from '../../src/core/layout.ts';
+import { groupCount, layoutFor, shouldApplyLayout } from '../../src/core/layout.ts';
 
 test('columns split the width evenly, left to right', () => {
   assert.deepEqual(layoutFor('single', 1), { orientation: 0, groups: [{ size: 1 }] });
@@ -17,4 +17,11 @@ test('never shrink: the layout applies only when it removes none of the user\'s 
   assert.equal(shouldApplyLayout(1, 3), true);
   assert.equal(shouldApplyLayout(3, 3), true);
   assert.equal(shouldApplyLayout(4, 2), false);
+});
+
+test('a layout holds one group per leaf, however deeply nested', () => {
+  assert.equal(groupCount({ orientation: 0, groups: [{}] }), 1);
+  assert.equal(groupCount(layoutFor('cols3', 3)), 3);
+  assert.equal(groupCount(layoutFor('main-stack', 4)), 4);
+  assert.equal(groupCount({ orientation: 1, groups: [{ groups: [{}, { groups: [{}, {}] }] }, {}] }), 4);
 });
