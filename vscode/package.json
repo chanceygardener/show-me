@@ -17,7 +17,9 @@
   "scripts": {
     "gen": "node scripts/gen-types.mjs",
     "typecheck": "tsc -p .",
-    "test": "node --test \"test/unit/*.test.ts\""
+    "test": "node --test \"test/unit/*.test.ts\"",
+    "build": "node scripts/build.mjs",
+    "test:integration": "node scripts/build.mjs --tests && vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "10.0.10",
