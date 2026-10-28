@@ -1,0 +1,35 @@
+{
+  "name": "show-me",
+  "displayName": "show-me",
+  "description": "Lets terminal coding agents show you code as decks of multi-pane views.",
+  "version": "0.1.0",
+  "publisher": "chanceygardener",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/chanceygardener/show-me", "directory": "vscode" },
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "engines": { "vscode": "^1.90.0" },
+  "extensionKind": ["workspace"],
+  "activationEvents": ["onStartupFinished"],
+  "categories": ["Other"],
+  "capabilities": { "untrustedWorkspaces": { "supported": true }, "virtualWorkspaces": false },
+  "contributes": {},
+  "scripts": {
+    "gen": "node scripts/gen-types.mjs",
+    "typecheck": "tsc -p .",
+    "test": "node --test \"test/unit/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/mocha": "10.0.10",
+    "@types/node": "20.19.43",
+    "@types/vscode": "1.90.0",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "json-schema-to-typescript": "16.0.0",
+    "mocha": "12.0.3",
+    "ovsx": "1.2.0",
+    "typescript": "7.0.2"
+  }
+}
