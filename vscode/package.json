@@ -5,21 +5,192 @@
   "version": "0.1.0",
   "publisher": "chanceygardener",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/chanceygardener/show-me", "directory": "vscode" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chanceygardener/show-me",
+    "directory": "vscode"
+  },
   "type": "module",
   "main": "./dist/extension.cjs",
-  "engines": { "vscode": "^1.90.0" },
-  "extensionKind": ["workspace"],
-  "activationEvents": ["onStartupFinished"],
-  "categories": ["Other"],
-  "capabilities": { "untrustedWorkspaces": { "supported": true }, "virtualWorkspaces": false },
-  "contributes": {},
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "showMe.openView1",
+        "title": "Open View 1",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView2",
+        "title": "Open View 2",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView3",
+        "title": "Open View 3",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView4",
+        "title": "Open View 4",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView5",
+        "title": "Open View 5",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView6",
+        "title": "Open View 6",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView7",
+        "title": "Open View 7",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView8",
+        "title": "Open View 8",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.openView9",
+        "title": "Open View 9",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.next",
+        "title": "Next View",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.previous",
+        "title": "Previous View",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.pickDeck",
+        "title": "Pick a Deck",
+        "category": "show-me"
+      },
+      {
+        "command": "showMe.close",
+        "title": "Close the View",
+        "category": "show-me"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "showMe.openView1",
+        "key": "ctrl+alt+v 1"
+      },
+      {
+        "command": "showMe.openView2",
+        "key": "ctrl+alt+v 2"
+      },
+      {
+        "command": "showMe.openView3",
+        "key": "ctrl+alt+v 3"
+      },
+      {
+        "command": "showMe.openView4",
+        "key": "ctrl+alt+v 4"
+      },
+      {
+        "command": "showMe.openView5",
+        "key": "ctrl+alt+v 5"
+      },
+      {
+        "command": "showMe.openView6",
+        "key": "ctrl+alt+v 6"
+      },
+      {
+        "command": "showMe.openView7",
+        "key": "ctrl+alt+v 7"
+      },
+      {
+        "command": "showMe.openView8",
+        "key": "ctrl+alt+v 8"
+      },
+      {
+        "command": "showMe.openView9",
+        "key": "ctrl+alt+v 9"
+      },
+      {
+        "command": "showMe.next",
+        "key": "ctrl+alt+v ]",
+        "when": "showMe.viewOpen"
+      },
+      {
+        "command": "showMe.previous",
+        "key": "ctrl+alt+v [",
+        "when": "showMe.viewOpen"
+      },
+      {
+        "command": "showMe.pickDeck",
+        "key": "ctrl+alt+v d"
+      },
+      {
+        "command": "showMe.close",
+        "key": "ctrl+alt+v q",
+        "when": "showMe.viewOpen"
+      }
+    ],
+    "configuration": {
+      "title": "show-me",
+      "properties": {
+        "showMe.openIn": {
+          "type": "string",
+          "scope": "resource",
+          "enum": [
+            "currentWindow"
+          ],
+          "enumDescriptions": [
+            "Lay views over this window's editor groups, then restore the layout."
+          ],
+          "default": "currentWindow",
+          "description": "Where show-me opens views."
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "showMe.rangeBackground",
+        "description": "Background of the lines a show-me pane highlights.",
+        "defaults": {
+          "dark": "editor.rangeHighlightBackground",
+          "light": "editor.rangeHighlightBackground",
+          "highContrast": "editor.rangeHighlightBackground"
+        }
+      }
+    ]
+  },
   "scripts": {
     "gen": "node scripts/gen-types.mjs",
     "typecheck": "tsc -p .",
     "test": "node --test \"test/unit/*.test.ts\"",
     "build": "node scripts/build.mjs",
-    "test:integration": "node scripts/build.mjs --tests && vscode-test"
+    "test:integration": "node scripts/build.mjs --tests && vscode-test",
+    "vscode:prepublish": "node scripts/build.mjs --production && node -e \"require('fs').copyFileSync('../LICENSE','LICENSE')\""
   },
   "devDependencies": {
     "@types/mocha": "10.0.10",
