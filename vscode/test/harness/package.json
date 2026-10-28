@@ -1,0 +1,10 @@
+{
+  "name": "show-me-harness",
+  "publisher": "show-me-test",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test-only: lets the Go conformance suite fake window focus. Never published.",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.cjs",
+  "activationEvents": ["onStartupFinished"]
+}
