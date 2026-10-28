@@ -19,8 +19,20 @@ const (
 	CommandStatus = "status"
 )
 
-// TransportNvim is Neovim's own msgpack-RPC server, called with nvim_exec_lua.
-const TransportNvim = "nvim"
+// Editors that publish registry entries.
+const (
+	EditorNvim   = "nvim"
+	EditorVSCode = "vscode"
+)
+
+// Transport kinds the CLI speaks.
+const (
+	// TransportNvim is Neovim's own msgpack-RPC server, called with nvim_exec_lua.
+	TransportNvim = "nvim"
+	// TransportNDJSON is one JSON request line and one JSON reply line over a
+	// Unix socket or named pipe, authenticated by the entry's token (VS Code).
+	TransportNDJSON = "ndjson"
+)
 
 // Layouts lists the approved layouts in documented order.
 var Layouts = []string{"single", "cols2", "cols3", "main-stack"}
