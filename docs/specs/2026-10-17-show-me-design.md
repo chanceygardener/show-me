@@ -124,6 +124,8 @@ included) put the repository root on `runtimepath`.
 | `skills/show-me/SKILL.md` | Agent instructions, editor-neutral |
 | `install.sh`, `install.ps1` | Installers (also published as release assets) |
 | `vscode/` | The VS Code extension (phase 2) |
+| `vscode/src/core/` | The extension's editor-independent logic: store, registry, rpc, server, session, layout, tabs. Nothing here imports `vscode`; a unit test enforces it |
+| `vscode/test/harness/` | Dev-only companion extension for the conformance suite: a socket the Go driver uses to fake window focus through the real extension's exported `touch()` |
 | `test/nvim/` | Neovim specs, run with `nvim -l` (helpers ported from kickstart.nvim) |
 | `test/conformance/` | Go tests that drive a real editor through the real CLI |
 | `.goreleaser.yaml`, `.github/workflows/` | Release builds and CI |
@@ -413,6 +415,45 @@ registry is derived from the configured keys (`:ShowMe 1` when `keys = false`).
 - **`showMe.openIn`** (`resource` scope): `currentWindow` (default) in phase 2;
   `newWindow` and `ask` only if the spike succeeds.
 
+### Rulings
+
+Settled before and during planning:
+
+- **Multi-root store:** new decks go into the store of the first workspace folder.
+  `status` and the registry list every folder.
+- **Conformance driver:** a dev-only harness extension (`vscode/test/harness/`) is
+  loaded alongside the real one; it calls the real extension's exported API
+  (`activate()` returns `{ touch() }`).
+- **Tooling:** npm and esbuild. The bundle is `dist/extension.cjs`, because
+  `vscode/package.json` is `"type": "module"`.
+- **Publishing:** gated. The release workflow builds the `.vsix`, attaches it to the
+  GitHub release, and publishes only when the `VSCE_PAT` and `OVSX_PAT` secrets exist.
+  `publisher` is the placeholder `chanceygardener` until an id is confirmed.
+- **`extensionKind: ["workspace"]`.** Same as `ui` on a local window; on Remote it puts
+  the registry entry and socket next to the CLI. Remote is untested.
+- **Never shrink, judged against the user's own groups.** A view's layout is applied
+  when the user's group count at snapshot time is at most the view's pane count.
+  Otherwise the view fills groups 1…N and the geometry is the user's.
+- **Restore check.** At close, the snapshot is restored only if the window's group
+  count still equals the count show-me left after its last view, taken before show-me
+  closes anything (`workbench.editor.closeEmptyGroups` removes groups as tabs close).
+- **Switching order.** Open the new view's panes first, then close created tabs the new
+  view doesn't reuse.
+- **A created tab the user has since edited** (`isDirty`) is the user's: left open and logged.
+- **Borrowed preview tabs stay preview tabs.**
+- **Active tabs that aren't text editors** can't be re-activated through the API, so
+  restoring skips them.
+- **A window with no folder open** registers with `workspace_folders: []`; a request
+  that reaches it is rejected with `this VS Code window has no folder open`.
+- **Highlight colour.** `showMe.rangeBackground` defaults to
+  `editor.rangeHighlightBackground`. Lines are highlighted whole.
+- **Caption.** One status-bar item shows the caption of the pane whose editor is active,
+  falling back to pane 1.
+- **The invopop dependency** is imported only by `internal/protocol/schemagen`, so the
+  CLI binary is unchanged.
+- **Unit tests run TypeScript directly** with Node 24's type stripping; `tsc` only
+  type-checks.
+
 ### `currentWindow`: lay over, never close the user's tabs
 
 Closing a tab with unsaved changes opens a save dialog, so the user's tabs are never
@@ -538,8 +579,14 @@ After phase 1 ships, in the kickstart.nvim repository:
 **Conformance** (`test/conformance/`, Go): starts headless Neovim with the plugin from
 the checkout and a temporary `SHOW_ME_HOME`, then runs the built CLI for a full
 deck → view → done session and every editor-side rejection, asserting stdout, stderr
-and exit codes against `PROTOCOL.md`. Phase 2 adds a VS Code target driven through
-`@vscode/test-electron`.
+and exit codes against `PROTOCOL.md`. Phase 2 adds a VS Code driver
+(`test/conformance/vscode_test.go`): it downloads VS Code with `@vscode/test-electron`
+(`vscode/test/conformance/vscode-path.mjs`), starts a fresh instance per test with its
+own user-data directory, the built extension and the harness extension
+(`vscode/test/harness/`), and fakes window focus by calling the harness's `touch`.
+Enable it with `SHOW_ME_CONFORMANCE_EDITORS=nvim,vscode` after `npm --prefix vscode run build`.
+Extension integration tests (`npm run test:integration`) run inside VS Code, stable by
+default and 1.90.0 in CI (`SHOW_ME_VSCODE_VERSION`).
 
 **Manual checks before the first release:** install via the one-liner on macOS (confirm
 no Gatekeeper prompt and that an agent can run it), Ubuntu, and Windows (confirm no
