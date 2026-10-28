@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
+import { GroupIds } from '../../src/groups.ts';
 import { Renderer } from '../../src/render.ts';
 import type { EditorLayout } from '../../src/core/layout.ts';
 import type { Deck } from '../../src/core/store.ts';
@@ -113,20 +114,24 @@ suite('currentWindow rendering', () => {
   });
 
   test('a tab borrowed in an earlier session is not closed after the user moves its group', async () => {
+    // Before VS Code 1.126 a TabGroup object goes stale on the next tab-model update; look the group up by id.
+    const ids = new GroupIds(vscode.window.createOutputChannel('show-me test ids', { log: true }));
     await openUser('a.txt', 1);
-    const userGroup = vscode.window.tabGroups.all[0]!;
+    const userGroupId = ids.of(vscode.window.tabGroups.all[0]!)!;
+    const userGroup = () => ids.group(userGroupId);
     await renderer.open(deck, 1);
     await renderer.close();
     await vscode.commands.executeCommand('workbench.action.newGroupLeft');
-    assert.equal(userGroup.viewColumn, 2);
+    assert.equal(userGroup()?.viewColumn, 2);
 
     await renderer.open(deck, 1);
     await renderer.close();
 
-    assert.ok(vscode.window.tabGroups.all.includes(userGroup), "the user's group survives");
-    assert.deepEqual(userGroup.tabs.map(t => (t.input as vscode.TabInputText).uri.toString()), [uriOf('a.txt')]);
+    assert.ok(userGroup(), "the user's group survives");
+    assert.deepEqual(userGroup()!.tabs.map(t => (t.input as vscode.TabInputText).uri.toString()), [uriOf('a.txt')]);
     const copies = vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => (t.input as vscode.TabInputText).uri.toString() === uriOf('a.txt'));
     assert.equal(copies.length, 1, "show-me's copy is closed");
+    ids.dispose();
   });
 
   test('a created tab reopened in a group the user inserted is closed too', async () => {
@@ -173,5 +178,27 @@ suite('currentWindow rendering', () => {
     const open = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => (t.input as vscode.TabInputText).uri.toString());
     assert.deepEqual(open.sort(), [uriOf('c.txt'), uriOf('d.txt'), uriOf('user.txt')].sort());
     assert.equal(vscode.window.tabGroups.all.length, 2);
+  });
+
+  test("a file the user reopens after closing show-me's tab for it is theirs", async () => {
+    await renderer.open(deck, 1);
+    const created = vscode.window.tabGroups.all[0]!.tabs.find(t => (t.input as vscode.TabInputText).uri.toString() === uriOf('a.txt'))!;
+    await vscode.window.tabGroups.close(created);
+    await openUser('a.txt', 1);
+    await renderer.step(2);
+    await renderer.close();
+    assert.deepEqual(tabsIn(1).map(t => t.uri), [uriOf('a.txt')]);
+  });
+
+  test('restores a window whose groups were not created in column order', async () => {
+    await openUser('user.txt', 1);
+    await openUser('other.txt', 1);
+    await vscode.commands.executeCommand('workbench.action.newGroupLeft');
+    await renderer.open({ ...deck, views: [{ layout: 'cols2', panes: [{ path: file('a.txt') }, { path: file('user.txt') }] }] }, 1);
+    await renderer.close();
+    assert.equal(vscode.window.tabGroups.all.length, 2);
+    assert.deepEqual(tabsIn(1), []);
+    assert.deepEqual(tabsIn(2).map(t => t.uri), [uriOf('user.txt'), uriOf('other.txt')]);
+    assert.equal(tabsIn(2).find(t => t.active)?.uri, uriOf('other.txt'));
   });
 });

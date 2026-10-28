@@ -8,10 +8,10 @@
  * tabs show-me created are closed when no longer needed. Closing restores the
  * snapshot unless the user has reshaped the window since.
  *
- * Groups are tracked by their `vscode.TabGroup` object, which the extension
- * host keeps for a group's lifetime, because a group's view column shifts
- * when the user splits a group or `workbench.editor.closeEmptyGroups`
- * removes one.
+ * Groups are tracked by a `GroupId`, which stays put for a group's lifetime,
+ * because a group's view column shifts when the user splits a group or
+ * `workbench.editor.closeEmptyGroups` removes one. A created tab the user
+ * closes is forgotten, so a tab they reopen for the same file is theirs.
  */
 import * as vscode from 'vscode';
 import { caption } from './core/format.ts';
@@ -21,6 +21,8 @@ import type { Pane } from './core/protocol.gen.ts';
 import type { Deck } from './core/store.ts';
 import { TabLedger } from './core/tabs.ts';
 import type { TabKey } from './core/tabs.ts';
+import { GroupIds } from './groups.ts';
+import type { GroupId } from './groups.ts';
 
 type Showing = {
   deck: Deck;
@@ -33,7 +35,10 @@ type Showing = {
 };
 
 /** The snapshot plus the user's own groups, in column order, to find the ones closing removed. */
-type Before = { snapshot: Snapshot; groups: readonly vscode.TabGroup[] };
+type Before = { snapshot: Snapshot; groups: readonly (GroupId | undefined)[] };
+
+/** The groups show-me opened a created tab for `uri` in. */
+type Tracked = { uri: string; groups: Set<GroupId> };
 
 const VIEW_OPEN = 'showMe.viewOpen';
 const id = (key: TabKey): string => `${key.column}|${key.uri}`;
@@ -45,7 +50,8 @@ export class Renderer implements vscode.Disposable {
    * Per created `column|uri`, every group show-me opened a tab for it in. Borrowed keys never
    * get an entry, so a user's tab can't be found through it.
    */
-  readonly #groups = new Map<string, Set<vscode.TabGroup>>();
+  readonly #tracked = new Map<string, Tracked>();
+  readonly #ids: GroupIds;
   readonly #decoration = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('showMe.rangeBackground'),
     isWholeLine: true,
@@ -57,11 +63,14 @@ export class Renderer implements vscode.Disposable {
 
   constructor(log: vscode.LogOutputChannel) {
     this.#log = log;
+    this.#ids = new GroupIds(log);
     this.#subscriptions = [
+      this.#ids,
       this.#decoration,
       this.#status,
       vscode.window.onDidChangeVisibleTextEditors(editors => this.#decorate(editors)),
       vscode.window.onDidChangeActiveTextEditor(editor => this.#caption(editor)),
+      vscode.window.tabGroups.onDidChangeTabs(event => this.#forget(event.closed)),
     ];
   }
 
@@ -72,7 +81,7 @@ export class Renderer implements vscode.Disposable {
   async open(deck: Deck, n: number): Promise<void> {
     const view = deck.views[n - 1];
     if (!view) return;
-    this.#before ??= await Renderer.#takeSnapshot();
+    this.#before ??= await this.#takeSnapshot();
     const layout = shouldApplyLayout(this.#before.snapshot.groups.length, view.panes.length) ? layoutFor(view.layout, view.panes.length) : undefined;
     // setEditorLayout merges the tabs of the groups it drops into the last group it keeps,
     // out of reach of #closeTabs, so a layout with fewer groups waits until those are closed.
@@ -105,7 +114,7 @@ export class Renderer implements vscode.Disposable {
     this.#showing = undefined;
     this.#before = undefined;
     await this.#closeTabs(this.#ledger.release());
-    this.#groups.clear();
+    this.#tracked.clear();
     this.#status.hide();
     this.#decorate(vscode.window.visibleTextEditors);
     await vscode.commands.executeCommand('setContext', VIEW_OPEN, false);
@@ -113,7 +122,11 @@ export class Renderer implements vscode.Disposable {
       this.#log.info('the window was reshaped during a view; leaving its layout as it is');
       return;
     }
-    await Renderer.#reinsertGroups(before.groups);
+    if (!before.groups.some(group => group !== undefined && this.#ids.group(group))) {
+      this.#log.warn("none of the window's groups from before the view are left; leaving its layout as it is");
+      return;
+    }
+    await this.#reinsertGroups(before.groups);
     await vscode.commands.executeCommand('vscode.setEditorLayout', before.snapshot.layout);
     await Renderer.#focusGroup(before.snapshot.activeColumn);
     await Renderer.#restoreActiveTabs(before.snapshot);
@@ -146,15 +159,35 @@ export class Renderer implements vscode.Disposable {
   #track(key: TabKey): void {
     const group = vscode.window.tabGroups.all.find(g => g.viewColumn === key.column);
     if (!group) return this.#log.warn(`no group in column ${key.column} after showing ${key.uri}`);
-    const groups = this.#groups.get(id(key)) ?? new Set();
-    this.#groups.set(id(key), groups.add(group));
+    const groupId = this.#ids.of(group);
+    if (groupId === undefined) return this.#log.warn(`column ${key.column} has an unknown group; not tracking ${key.uri}`);
+    const tracked = this.#tracked.get(id(key)) ?? { uri: key.uri, groups: new Set() };
+    tracked.groups.add(groupId);
+    this.#tracked.set(id(key), tracked);
+  }
+
+  /**
+   * Stop tracking show-me's tabs that were closed, by the user or by show-me. A tab whose group
+   * is unknown is forgotten in every group: losing track only leaves a tab open.
+   */
+  #forget(closed: readonly vscode.Tab[]): void {
+    for (const tab of closed) {
+      if (!(tab.input instanceof vscode.TabInputText)) continue;
+      const uri = tab.input.uri.toString();
+      const groupId = this.#ids.of(tab.group);
+      for (const tracked of this.#tracked.values()) {
+        if (tracked.uri !== uri) continue;
+        if (groupId === undefined) tracked.groups.clear();
+        else tracked.groups.delete(groupId);
+      }
+    }
   }
 
   /** Close the tabs show-me opened for `keys` and forget them; `keys` must be ones the ledger released. */
   async #closeTabs(keys: TabKey[]): Promise<void> {
     const tabs = keys.flatMap(key => {
       const found = this.#trackedTabs(key);
-      this.#groups.delete(id(key));
+      this.#tracked.delete(id(key));
       const dirty = found.filter(tab => tab.isDirty);
       if (dirty.length > 0) this.#log.info(`leaving ${key.uri} open: it has unsaved changes`);
       return found.filter(tab => !tab.isDirty);
@@ -167,10 +200,10 @@ export class Renderer implements vscode.Disposable {
    * A group that's gone is skipped: falling back to `key.column` could find a user's tab.
    */
   #trackedTabs(key: TabKey): vscode.Tab[] {
-    const live = new Set(vscode.window.tabGroups.all);
-    return [...(this.#groups.get(id(key)) ?? [])].flatMap(group => {
-      const tab = live.has(group) ? Renderer.#tabIn(group, key.uri) : undefined;
-      if (!live.has(group)) this.#log.debug(`a group that showed ${key.uri} is gone; not closing anything for it`);
+    return [...(this.#tracked.get(id(key))?.groups ?? [])].flatMap(groupId => {
+      const group = this.#ids.group(groupId);
+      if (!group) this.#log.debug(`a group that showed ${key.uri} is gone; not closing anything for it`);
+      const tab = group && Renderer.#tabIn(group, key.uri);
       return tab ? [tab] : [];
     });
   }
@@ -204,22 +237,24 @@ export class Renderer implements vscode.Disposable {
     return group.tabs.find(tab => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri);
   }
 
-  static async #takeSnapshot(): Promise<Before> {
+  /** `tabGroups.all` lists groups in creation order; the snapshot lists them in column order. */
+  async #takeSnapshot(): Promise<Before> {
     const layout = await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout');
-    const all = vscode.window.tabGroups.all;
+    const all = [...vscode.window.tabGroups.all].sort((a, b) => a.viewColumn - b.viewColumn);
     const groups = all.map(group => {
       const tab = group.activeTab;
       return tab?.input instanceof vscode.TabInputText ? { activeUri: tab.input.uri.toString(), activePreview: tab.isPreview } : { activePreview: false };
     });
-    return { snapshot: { layout, groups, activeColumn: vscode.window.tabGroups.activeTabGroup.viewColumn }, groups: [...all] };
+    return { snapshot: { layout, groups, activeColumn: vscode.window.tabGroups.activeTabGroup.viewColumn }, groups: all.map(group => this.#ids.of(group)) };
   }
 
   /**
    * `closeEmptyGroups` removes a group when show-me closes its last tab, shifting the user's
    * groups after it one column left. Put each removed group back in its place.
    */
-  static async #reinsertGroups(groups: readonly vscode.TabGroup[]): Promise<void> {
-    const removed = groups.flatMap((group, i) => (vscode.window.tabGroups.all.includes(group) ? [] : [i + 1]));
+  async #reinsertGroups(groups: readonly (GroupId | undefined)[]): Promise<void> {
+    const live = this.#ids.live();
+    const removed = groups.flatMap((group, i) => (group === undefined || live.has(group) ? [] : [i + 1]));
     for (const column of removed) {
       // Past the last group, setEditorLayout appends the rest.
       if (column > vscode.window.tabGroups.all.length) break;
