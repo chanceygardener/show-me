@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { Renderer } from '../../src/render.ts';
+import type { EditorLayout } from '../../src/core/layout.ts';
 import type { Deck } from '../../src/core/store.ts';
 
 const root = vscode.workspace.workspaceFolders![0]!.uri.fsPath;
@@ -109,5 +110,68 @@ suite('currentWindow rendering', () => {
     assert.ok(groups >= 3);
     assert.ok(left.length >= 1, 'the tab the user split off stays open');
     assert.equal(left.filter(u => u === uriOf('d.txt')).length, 0, "show-me's own tabs are closed");
+  });
+
+  test('a tab borrowed in an earlier session is not closed after the user moves its group', async () => {
+    await openUser('a.txt', 1);
+    const userGroup = vscode.window.tabGroups.all[0]!;
+    await renderer.open(deck, 1);
+    await renderer.close();
+    await vscode.commands.executeCommand('workbench.action.newGroupLeft');
+    assert.equal(userGroup.viewColumn, 2);
+
+    await renderer.open(deck, 1);
+    await renderer.close();
+
+    assert.ok(vscode.window.tabGroups.all.includes(userGroup), "the user's group survives");
+    assert.deepEqual(userGroup.tabs.map(t => (t.input as vscode.TabInputText).uri.toString()), [uriOf('a.txt')]);
+    const copies = vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => (t.input as vscode.TabInputText).uri.toString() === uriOf('a.txt'));
+    assert.equal(copies.length, 1, "show-me's copy is closed");
+  });
+
+  test('a created tab reopened in a group the user inserted is closed too', async () => {
+    const twice: Deck = { ...deck, views: [deck.views[1]!, { layout: 'cols2', panes: [{ path: file('a.txt') }, { path: file('d.txt') }] }] };
+    await renderer.open(twice, 1);
+    await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+    await vscode.commands.executeCommand('workbench.action.newGroupLeft');
+    await renderer.step(1);
+    await renderer.close();
+    const open = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => (t.input as vscode.TabInputText).uri.toString());
+    assert.deepEqual(open, []);
+  });
+
+  test('a middle group emptied by show-me is put back in its place', async () => {
+    await vscode.commands.executeCommand('vscode.setEditorLayout', { orientation: 0, groups: [{}, {}, {}] });
+    await openUser('user.txt', 1);
+    await openUser('other.txt', 3);
+    await renderer.open({ ...deck, views: [{ layout: 'cols2', panes: [{ path: file('user.txt') }, { path: file('a.txt') }] }] }, 1);
+    await renderer.close();
+    assert.equal(vscode.window.tabGroups.all.length, 3);
+    assert.deepEqual(tabsIn(1).map(t => t.uri), [uriOf('user.txt')]);
+    assert.deepEqual(tabsIn(2), []);
+    assert.deepEqual(tabsIn(3).map(t => t.uri), [uriOf('other.txt')]);
+  });
+
+  test('an emptied group in a main-stack layout is put back in its place', async () => {
+    const shape = (layout: EditorLayout): number[] => layout.groups.map(g => g.groups?.length ?? 0);
+    await vscode.commands.executeCommand('vscode.setEditorLayout', { orientation: 0, groups: [{}, { groups: [{}, {}] }] });
+    const before = await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout');
+    await openUser('user.txt', 1);
+    await openUser('other.txt', 3);
+    await renderer.open({ ...deck, views: [{ layout: 'cols2', panes: [{ path: file('user.txt') }, { path: file('a.txt') }] }] }, 1);
+    await renderer.close();
+    const after = await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout');
+    assert.deepEqual(shape(after), shape(before));
+    assert.deepEqual(tabsIn(2), []);
+    assert.deepEqual(tabsIn(3).map(t => t.uri), [uriOf('other.txt')]);
+  });
+
+  test('a smaller view keeps a tab the user opened in a group it drops', async () => {
+    await renderer.open(deck, 3);
+    await openUser('user.txt', 3);
+    await renderer.step(-1);
+    const open = vscode.window.tabGroups.all.flatMap(g => g.tabs).map(t => (t.input as vscode.TabInputText).uri.toString());
+    assert.deepEqual(open.sort(), [uriOf('c.txt'), uriOf('d.txt'), uriOf('user.txt')].sort());
+    assert.equal(vscode.window.tabGroups.all.length, 2);
   });
 });

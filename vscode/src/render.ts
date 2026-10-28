@@ -41,8 +41,11 @@ const id = (key: TabKey): string => `${key.column}|${key.uri}`;
 export class Renderer implements vscode.Disposable {
   readonly #log: vscode.LogOutputChannel;
   readonly #ledger = new TabLedger();
-  /** The group each recorded tab was shown in, per `column|uri`. */
-  readonly #groups = new Map<string, vscode.TabGroup>();
+  /**
+   * Per created `column|uri`, every group show-me opened a tab for it in. Borrowed keys never
+   * get an entry, so a user's tab can't be found through it.
+   */
+  readonly #groups = new Map<string, Set<vscode.TabGroup>>();
   readonly #decoration = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('showMe.rangeBackground'),
     isWholeLine: true,
@@ -102,6 +105,7 @@ export class Renderer implements vscode.Disposable {
     this.#showing = undefined;
     this.#before = undefined;
     await this.#closeTabs(this.#ledger.release());
+    this.#groups.clear();
     this.#status.hide();
     this.#decorate(vscode.window.visibleTextEditors);
     await vscode.commands.executeCommand('setContext', VIEW_OPEN, false);
@@ -129,8 +133,7 @@ export class Renderer implements vscode.Disposable {
       preview: existing?.isPreview ?? false,
       preserveFocus: key.column !== 1,
     });
-    const group = vscode.window.tabGroups.all.find(g => g.viewColumn === key.column);
-    if (group && !this.#groups.has(id(key))) this.#groups.set(id(key), group);
+    if (!existing && this.#ledger.isCreated(key)) this.#track(key);
     if (pane.first === undefined) return undefined;
     // The file may have shrunk since the agent made the deck.
     const last = document.lineCount - 1;
@@ -139,27 +142,37 @@ export class Renderer implements vscode.Disposable {
     return range;
   }
 
+  /** Remember the group show-me just opened a tab for created `key` in. */
+  #track(key: TabKey): void {
+    const group = vscode.window.tabGroups.all.find(g => g.viewColumn === key.column);
+    if (!group) return this.#log.warn(`no group in column ${key.column} after showing ${key.uri}`);
+    const groups = this.#groups.get(id(key)) ?? new Set();
+    this.#groups.set(id(key), groups.add(group));
+  }
+
+  /** Close the tabs show-me opened for `keys` and forget them; `keys` must be ones the ledger released. */
   async #closeTabs(keys: TabKey[]): Promise<void> {
     const tabs = keys.flatMap(key => {
-      const tab = this.#trackedTab(key);
+      const found = this.#trackedTabs(key);
       this.#groups.delete(id(key));
-      if (tab?.isDirty) this.#log.info(`leaving ${key.uri} open: it has unsaved changes`);
-      return tab && !tab.isDirty ? [tab] : [];
+      const dirty = found.filter(tab => tab.isDirty);
+      if (dirty.length > 0) this.#log.info(`leaving ${key.uri} open: it has unsaved changes`);
+      return found.filter(tab => !tab.isDirty);
     });
     if (tabs.length > 0) await vscode.window.tabGroups.close(tabs, true);
   }
 
   /**
-   * The tab for `key` in the group it was shown in, wherever that group is now.
-   * Undefined once the group is gone: falling back to `key.column` could find a user's tab.
+   * The tabs for `key` in the groups show-me opened it in, wherever those groups are now.
+   * A group that's gone is skipped: falling back to `key.column` could find a user's tab.
    */
-  #trackedTab(key: TabKey): vscode.Tab | undefined {
-    const group = this.#groups.get(id(key));
-    if (!group || !vscode.window.tabGroups.all.includes(group)) {
-      this.#log.debug(`the group that showed ${key.uri} is gone; not closing anything for it`);
-      return undefined;
-    }
-    return Renderer.#tabIn(group, key.uri);
+  #trackedTabs(key: TabKey): vscode.Tab[] {
+    const live = new Set(vscode.window.tabGroups.all);
+    return [...(this.#groups.get(id(key)) ?? [])].flatMap(group => {
+      const tab = live.has(group) ? Renderer.#tabIn(group, key.uri) : undefined;
+      if (!live.has(group)) this.#log.debug(`a group that showed ${key.uri} is gone; not closing anything for it`);
+      return tab ? [tab] : [];
+    });
   }
 
   /** Highlight the current view's ranges in visible editors; clear every other show-me highlight. */
