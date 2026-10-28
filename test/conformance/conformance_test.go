@@ -18,7 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neovim/go-client/nvim"
+
 	"github.com/chanceygardener/show-me/internal/protocol"
+	"github.com/chanceygardener/show-me/internal/transport"
 )
 
 var repoRoot, cliPath string
@@ -161,14 +164,26 @@ func (w *world) expect(dir string, code int, stdout string, args ...string) stri
 	return errOut
 }
 
-// remote evaluates a Vimscript expression in a running editor.
+// remote evaluates a Vimscript expression in a running editor over RPC.
+// `nvim --remote-expr` is not used: on Windows that client writes terminal
+// setup sequences into its output.
 func (w *world) remote(e *editor, expr string) string {
 	w.t.Helper()
-	out, err := exec.Command("nvim", "--server", e.address, "--remote-expr", expr).CombinedOutput()
+	conn, err := transport.Dial(e.address, transport.DialTimeout)
 	if err != nil {
-		w.t.Fatalf("--remote-expr %s: %v\n%s", expr, err, out)
+		w.t.Fatalf("dial %s: %v", e.address, err)
 	}
-	return strings.TrimSpace(string(out))
+	defer conn.Close()
+	client, err := nvim.New(conn, conn, conn, func(string, ...any) {})
+	if err != nil {
+		w.t.Fatalf("rpc %s: %v", e.address, err)
+	}
+	go func() { _ = client.Serve() }()
+	var result any
+	if err := client.Eval(expr, &result); err != nil {
+		w.t.Fatalf("eval %s: %v", expr, err)
+	}
+	return fmt.Sprint(result)
 }
 
 func TestSession(t *testing.T) {

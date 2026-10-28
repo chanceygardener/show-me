@@ -47,8 +47,10 @@ install --no-skill >/dev/null
 check "--no-skill leaves the skill alone" '[ -f "$home/.claude/skills/show-me/SKILL.md" ]'
 
 echo tampered >>"$release/$asset"
+# shellcheck disable=SC2034 # before and status are read inside check's eval
 before=$(cksum <"$home/state/bin/show-me")
 status=0
+# shellcheck disable=SC2034
 install >/dev/null 2>"$work/err" || status=$?
 check "a checksum mismatch fails" '[ "$status" -ne 0 ] && grep -q "checksum mismatch" "$work/err"'
 check "a checksum mismatch leaves the binary alone" '[ "$(cksum <"$home/state/bin/show-me")" = "$before" ]'

@@ -51,7 +51,7 @@ func sendNvim(address string, req protocol.Request) (protocol.Reply, error) {
 	if err != nil {
 		return protocol.Reply{}, err
 	}
-	conn, err := dial(address, DialTimeout)
+	conn, err := Dial(address, DialTimeout)
 	if err != nil {
 		return protocol.Reply{}, &Unreachable{Address: address, Err: err}
 	}

@@ -48,7 +48,7 @@ func startNvim(t *testing.T) (string, *exec.Cmd) {
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if conn, err := dial(addr, time.Second); err == nil {
+		if conn, err := Dial(addr, time.Second); err == nil {
 			_ = conn.Close()
 			return addr, cmd
 		}

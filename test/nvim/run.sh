@@ -11,7 +11,7 @@ status=0
 for spec in test/nvim/*_spec.lua; do
   [ -e "$spec" ] || continue
   if [ -n "$filter" ] && [[ "$spec" != *"$filter"* ]]; then continue; fi
-  echo "$(basename "$spec")"
+  basename "$spec"
   if ! nvim --clean -l "$spec"; then status=1; fi
 done
 if [ "$status" -eq 0 ]; then echo "all specs passed"; else echo "SPEC FAILURES"; fi

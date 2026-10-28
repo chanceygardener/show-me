@@ -10,8 +10,8 @@ import (
 	"github.com/Microsoft/go-winio"
 )
 
-// dial connects to a named pipe (Neovim's default on Windows) or host:port.
-func dial(address string, timeout time.Duration) (net.Conn, error) {
+// Dial connects to a named pipe (Neovim's default on Windows) or host:port.
+func Dial(address string, timeout time.Duration) (net.Conn, error) {
 	if strings.HasPrefix(address, `\\.\pipe\`) {
 		return winio.DialPipe(address, &timeout)
 	}
