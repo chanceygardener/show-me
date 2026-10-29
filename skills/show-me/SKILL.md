@@ -39,7 +39,8 @@ is involved.
    answer.
 4. Start your answer with one line saying the views are ready and how to open
    them, using the `open:` keys (for example "Views 1–3 are ready in your
-   editor: `<leader>v1`"). Then cite views by number and pane position:
+   editor: `<leader>v1`"; VS Code prints `ctrl+alt+v 1`). Then cite views by
+   number and pane position:
    *"the token is minted in `mint()` (**view 1**, top-right pane)…"*
 
 ## Panes
