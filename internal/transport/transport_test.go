@@ -90,7 +90,7 @@ func TestSendUnreachable(t *testing.T) {
 }
 
 func TestSendUnsupportedTransport(t *testing.T) {
-	_, err := Send(protocol.Transport{Kind: "ndjson", Address: "x"}, protocol.Request{})
+	_, err := Send(protocol.Transport{Kind: "carrier-pigeon", Address: "x"}, protocol.Request{})
 	var u *Unreachable
 	if !errors.As(err, &u) {
 		t.Fatalf("want *Unreachable, got %v", err)

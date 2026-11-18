@@ -41,3 +41,60 @@ jobs:
         with:
           version: "~> v2"
           args: check
+
+  extension:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      SHOW_ME_CONFORMANCE_EDITORS: vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - run: npm ci
+        working-directory: vscode
+      - run: npm run typecheck
+        working-directory: vscode
+      - run: npm test
+        working-directory: vscode
+      - name: generated protocol files are current
+        if: runner.os == 'Linux'
+        run: |
+          go generate ./internal/protocol
+          npm --prefix vscode run gen
+          git diff --exit-code -- protocol/schema.json vscode/src/core/protocol.gen.ts
+      - run: npm run build
+        working-directory: vscode
+      - run: xvfb-run -a npm run test:integration
+        if: runner.os == 'Linux'
+        working-directory: vscode
+      - run: npm run test:integration
+        if: runner.os != 'Linux'
+        working-directory: vscode
+      - name: integration tests on the engines floor (VS Code 1.90.0)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:integration
+        working-directory: vscode
+        env:
+          SHOW_ME_VSCODE_VERSION: 1.90.0
+      - run: xvfb-run -a go test ./test/conformance -count=1 -v -timeout 30m
+        if: runner.os == 'Linux'
+      - run: go test ./test/conformance -count=1 -v -timeout 30m
+        if: runner.os != 'Linux'
+      - run: npx vsce package --no-dependencies -o show-me.vsix
+        if: runner.os == 'Linux'
+        working-directory: vscode
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: show-me-vsix
+          path: vscode/show-me.vsix

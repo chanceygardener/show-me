@@ -6,7 +6,7 @@ up to four files side by side, scrolled to and highlighting the lines it means.
 You open the views at your own pace while you read its answer. Nothing pops up
 uninvited; you get a notification.
 
-Works with Neovim 0.10+ on macOS, Linux and Windows. VS Code support is next.
+Works with Neovim 0.10+ and VS Code 1.90+ (and Cursor, VSCodium) on macOS, Linux and Windows.
 
 ## Install
 
@@ -29,6 +29,13 @@ Works with Neovim 0.10+ on macOS, Linux and Windows. VS Code support is next.
 
 The build step installs the matching `show-me` CLI and the agent skill, so
 that's all Neovim users need.
+
+### VS Code
+
+Install **show-me** from the VS Code Marketplace (Cursor and VSCodium: from
+Open VSX), then install the CLI and skill with the one-liner below, or accept
+the "Run installer" prompt the extension shows. See
+[`vscode/README.md`](vscode/README.md).
 
 ### CLI and skill on their own
 
@@ -63,7 +70,16 @@ editor. When its views are ready you'll get a notification.
 | `<leader>vq` | Close the show-me tab |
 | `:ShowMe [n]` | Open view n, or pick a deck |
 
-Views open in their own tab. If your tab has neo-tree or nvim-tree open, the
+In VS Code:
+
+| Keys | Action |
+|---|---|
+| `ctrl+alt+v 1`…`ctrl+alt+v 9` | Open view N of the current deck |
+| `ctrl+alt+v ]` / `ctrl+alt+v [` | Next / previous view (while a view is open) |
+| `ctrl+alt+v d` | Pick a recent deck |
+| `ctrl+alt+v q` | Close the view (while a view is open) |
+
+In Neovim, views open in their own tab. If your tab has neo-tree or nvim-tree open, the
 show-me tab opens it too. Run `:checkhealth show_me` if agents can't reach you.
 
 ## Configure

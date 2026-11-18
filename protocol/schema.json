@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "CurrentDeck": {
+      "properties": {
+        "deck": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "views": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "deck",
+        "title",
+        "views"
+      ]
+    },
+    "DeckResult": {
+      "properties": {
+        "deck": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "deck"
+      ]
+    },
+    "DoneResult": {
+      "properties": {
+        "deck": {
+          "type": "integer"
+        },
+        "views": {
+          "type": "integer"
+        },
+        "open_hint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "deck",
+        "views",
+        "open_hint"
+      ]
+    },
+    "Entry": {
+      "properties": {
+        "protocol": {
+          "type": "integer"
+        },
+        "editor": {
+          "type": "string",
+          "enum": [
+            "nvim",
+            "vscode"
+          ]
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "workspace_folders": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "transport": {
+          "$ref": "#/$defs/Transport"
+        },
+        "open_hint": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "integer"
+        },
+        "focused_at": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "protocol",
+        "editor",
+        "pid",
+        "workspace_folders",
+        "transport",
+        "open_hint",
+        "started_at",
+        "focused_at"
+      ]
+    },
+    "Pane": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "first": {
+          "type": "integer"
+        },
+        "last": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ]
+    },
+    "Reply": {
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "result": true
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "ok"
+      ]
+    },
+    "Request": {
+      "properties": {
+        "protocol": {
+          "type": "integer"
+        },
+        "token": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string",
+          "enum": [
+            "deck",
+            "view",
+            "done",
+            "status"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "deck": {
+          "type": "integer"
+        },
+        "view": {
+          "$ref": "#/$defs/View"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "protocol",
+        "command"
+      ]
+    },
+    "StatusResult": {
+      "properties": {
+        "editor": {
+          "type": "string",
+          "enum": [
+            "nvim",
+            "vscode"
+          ]
+        },
+        "workspace_folders": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "current": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CurrentDeck"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "editor",
+        "workspace_folders",
+        "current"
+      ]
+    },
+    "Transport": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "nvim",
+            "ndjson"
+          ]
+        },
+        "address": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind",
+        "address"
+      ]
+    },
+    "View": {
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "single",
+            "cols2",
+            "cols3",
+            "main-stack"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "panes": {
+          "items": {
+            "$ref": "#/$defs/Pane"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "layout",
+        "panes"
+      ]
+    },
+    "ViewResult": {
+      "properties": {
+        "view": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "view"
+      ]
+    }
+  },
+  "properties": {
+    "request": {
+      "$ref": "#/$defs/Request"
+    },
+    "reply": {
+      "$ref": "#/$defs/Reply"
+    },
+    "deck_result": {
+      "$ref": "#/$defs/DeckResult"
+    },
+    "view_result": {
+      "$ref": "#/$defs/ViewResult"
+    },
+    "done_result": {
+      "$ref": "#/$defs/DoneResult"
+    },
+    "status_result": {
+      "$ref": "#/$defs/StatusResult"
+    },
+    "entry": {
+      "$ref": "#/$defs/Entry"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "request",
+    "reply",
+    "deck_result",
+    "view_result",
+    "done_result",
+    "status_result",
+    "entry"
+  ],
+  "title": "ShowMeProtocol",
+  "description": "show-me protocol 1. Generated from internal/protocol; do not edit."
+}

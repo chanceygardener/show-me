@@ -48,6 +48,7 @@ is a file. `--` ends options. Diagnostics go to stderr as `show-me: <message>`.
 | View sent to a done deck | Editor | `deck 7 is already done; start a new one` |
 | Tenth view | Editor | `deck 7 already has 9 views, the most an editor can open by number` |
 | `done` with no views | Editor | `deck 7 has no views` |
+| Bad token | Editor (ndjson) | `bad token` |
 
 Line counts follow editor convention: a trailing newline does not start a new
 line, and an empty file has 0 lines.
@@ -67,7 +68,8 @@ line, and an empty file has 0 lines.
 
 `$SHOW_ME_HOME`; else `$XDG_STATE_HOME/show-me`; else `~/.local/state/show-me`.
 On Windows, `%LOCALAPPDATA%\show-me`. Empty variables count as unset. Mode 0700
-on POSIX. It holds `editors/` (the registry) and `bin/` (the installed CLI).
+on POSIX. It holds `editors/` (the registry), `bin/` (the installed CLI) and
+`sock/` (VS Code sockets, POSIX only).
 
 ### Registry
 
@@ -86,6 +88,9 @@ Each running editor writes `editors/<editor>-<pid>.json`, mode 0600, atomically
   "focused_at": 1792224310000
 }
 ```
+
+`editor` is `nvim` or `vscode`. `protocol/schema.json` describes every shape here;
+it is generated from `internal/protocol`.
 
 Workspace folders are absolute and symlink-resolved. Times are epoch
 milliseconds. `focused_at` is updated whenever the editor gains focus.
@@ -136,8 +141,12 @@ An editor that doesn't speak the request's `protocol` replies
   a Windows named pipe, or host:port). The CLI calls
   `nvim_exec_lua("return require('show_me.rpc').handle(...)", [request_json])`
   and gets the reply JSON back as a string.
-- **`ndjson`** (VS Code, phase 2): one request line, one reply line, then close.
-  Every request carries the entry's `token`.
+- **`ndjson`** (VS Code): the address is a Unix socket (`<base>/sock/vscode-<pid>.sock`,
+  mode 0600 in a 0700 directory) or a Windows named pipe
+  (`\\.\pipe\show-me-vscode-<pid>-<random>`). The CLI writes one request line
+  carrying the entry's `token` (64 hex characters) and reads one reply line;
+  the editor then closes the connection. A request without the right token
+  gets `bad token`. Requests over 1 MiB are dropped.
 
 ### What every editor does
 

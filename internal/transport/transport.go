@@ -1,9 +1,10 @@
 // Package transport delivers one request to one editor and returns its reply.
 //
-// Phase 1 speaks to Neovim only, over its built-in msgpack-RPC server: the
-// request JSON is passed to the plugin's rpc.handle with nvim_exec_lua, so
-// nothing is quoted into Vimscript. Any other transport kind is reported as
-// unreachable, and the CLI moves on to the next editor.
+// Two transports exist. `nvim` speaks to Neovim's built-in msgpack-RPC
+// server: the request JSON is passed to the plugin's rpc.handle with
+// nvim_exec_lua, so nothing is quoted into Vimscript. `ndjson` writes one
+// request line to a socket or named pipe and reads one reply line (VS Code).
+// Any other kind is reported as unreachable, and the CLI moves on.
 package transport
 
 import (
@@ -41,6 +42,8 @@ func Send(t protocol.Transport, req protocol.Request) (protocol.Reply, error) {
 	switch t.Kind {
 	case protocol.TransportNvim:
 		return sendNvim(t.Address, req)
+	case protocol.TransportNDJSON:
+		return sendNDJSON(t, req)
 	default:
 		return protocol.Reply{}, &Unreachable{Address: t.Address, Err: fmt.Errorf("unsupported transport %q", t.Kind)}
 	}

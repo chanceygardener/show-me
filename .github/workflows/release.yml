@@ -24,3 +24,30 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  vscode:
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: package.json version matches VERSION
+        run: test "$(node -p "require('./package.json').version")" = "$(cat ../VERSION)"
+      - run: npm ci
+      - run: npx vsce package --no-dependencies -o "show-me-$(cat ../VERSION).vsix"
+      - run: gh release upload "$GITHUB_REF_NAME" show-me-*.vsix
+      - name: publish to the VS Code Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx vsce publish --no-dependencies --packagePath show-me-*.vsix
+      - name: publish to Open VSX
+        if: env.OVSX_PAT != ''
+        run: npx ovsx publish show-me-*.vsix -p "$OVSX_PAT"
